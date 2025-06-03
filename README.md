@@ -31,38 +31,79 @@ A Laravel + Vue.js multi-tenant eCommerce platform with separate databases per s
 
 Run tests with: `php artisan test`
 
-Architecture Overview
-This multi-tenant eCommerce platform implements a multi-database architecture where each tenant (store) has its own isolated database. This approach provides the highest level of data isolation and security.
-System Architecture Diagram
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Vue.js SPA    │────▶│  Laravel API    │────▶│   MySQL DBs     │
-│                 │     │                 │     │                 │
-│ - Product List  │     │ - Controllers   │     │ - Main DB       │
-│ - Shopping Cart │     │ - Middleware    │     │ - Tenant DB 1   │
-│ - Admin Panel   │     │ - Services      │     │ - Tenant DB 2   │
-│                 │     │ - Models        │     │ - Tenant DB N   │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-Technology Stack
+## Architecture
 
-Frontend: Vue.js 3, Vue Router, Pinia (State Management)
-Backend: Laravel 10.x, Laravel Sanctum (Authentication)
-Database: MySQL (Multiple databases)
-Storage: Local filesystem for product images
+This platform uses a multi-database tenancy approach where each store (tenant) has its own isolated database. This ensures complete data separation and enhanced security.
 
-Multi-Database Tenancy Design
-Core Concept
-Each tenant (store) operates in complete isolation with:
+┌─────────────────────────────────────────────────────────────┐
+│                        Main Database                         │
+│                     (ecommerce_main)                        │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐  │
+│  │                   Tenants Table                      │  │
+│  │  ┌────┬─────────────┬───────────┬────────────────┐ │  │
+│  │  │ ID │ Store Name  │   Slug    │ Database Name  │ │  │
+│  │  ├────┼─────────────┼───────────┼────────────────┤ │  │
+│  │  │ 1  │ Electronics │ electronics│ tenant_        │ │  │
+│  │  │    │ Store       │ -store    │ electronics... │ │  │
+│  │  │ 2  │ Fashion     │ fashion-  │ tenant_        │ │  │
+│  │  │    │ Boutique    │ boutique  │ fashion...     │ │  │
+│  │  └────┴─────────────┴───────────┴────────────────┘ │  │
+│  └─────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+       ┌──────────────────────┴───────────────────────┐
+       │                                              │
+       ▼                                              ▼
+┌──────────────────┐                      ┌──────────────────┐
+│ Tenant Database 1│                      │ Tenant Database 2│
+│(tenant_electronics-store)               │(tenant_fashion-boutique)
+│                  │                      │                  │
+│ ┌──────────────┐ │                      │ ┌──────────────┐ │
+│ │    Users     │ │                      │ │    Users     │ │
+│ │ (Store Admins)│ │                      │ │ (Store Admins)│ │
+│ └──────────────┘ │                      │ └──────────────┘ │
+│ ┌──────────────┐ │                      │ ┌──────────────┐ │
+│ │   Products   │ │                      │ │   Products   │ │
+│ │              │ │                      │ │              │ │
+│ └──────────────┘ │                      │ └──────────────┘ │
+│ ┌──────────────┐ │                      │ ┌──────────────┐ │
+│ │Auth Tokens   │ │                      │ │Auth Tokens   │ │
+│ └──────────────┘ │                      │ └──────────────┘ │
+└──────────────────┘                      └──────────────────┘
 
-Dedicated database instance
-Separate user authentication
-Isolated product catalog
-Independent data management
+How It Works
 
-Database Naming Convention
-Main Database: ecommerce_main
-Tenant Databases: tenant_{store_slug}
+Main Database (ecommerce_main)
 
-Examples:
-- tenant_electronics-store
-- tenant_fashion-boutique
-- tenant_book-haven
+Stores tenant (store) metadata
+Maps store slugs to database names
+Central registry of all stores
+
+
+Tenant Databases (tenant_*)
+
+Each store has its own database
+Contains: Users, Products, Auth Tokens
+Complete isolation from other stores
+
+
+Dynamic Database Switching
+php// When a request comes in:
+TenantService::switchToTenant($tenantId);
+// All subsequent queries run on tenant's database
+
+
+Data Flow Example
+User Login Flow:
+1. Admin selects store: "Electronics Store"
+2. System looks up database: "tenant_electronics-store"
+3. Switches connection to tenant database
+4. Validates credentials against tenant's users table
+5. Returns auth token stored in tenant database
+
+Product Management:
+1. Admin authenticated with tenant context
+2. All product operations occur in tenant database
+3. No possibility of accessing other store's data
